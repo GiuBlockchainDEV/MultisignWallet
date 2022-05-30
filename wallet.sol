@@ -32,7 +32,6 @@ abstract contract ReentrancyGuard {
 
 abstract contract Ownable is Context {
     address private _owner;
-    address private daomember = 0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2;
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() {
@@ -46,11 +45,6 @@ abstract contract Ownable is Context {
     modifier onlyOwner() {
         //Throws if called by any account other than the owner
         require(owner() == _msgSender(), "Ownable: caller is not the owner");
-        _;}
-
-    modifier onlyDAO() {
-        //Throws if called by any account other than the owner
-        require(owner() == _msgSender() || daomember == _msgSender(), "Ownable: caller is not DAO member");
         _;}
 
     function renounceOwnership() public virtual onlyOwner {
@@ -83,11 +77,13 @@ contract MultisigDH is Ownable, ReentrancyGuard {
         uint qty_vote;
         uint yes;
         uint no;
-        bool ended;}
+        bool ended;
+        bool passed;}
     
     struct vote_weight {
         uint weight;
-        string role;}
+        string role;
+        bool daomember;}
 
     uint public multisig = 10;
     uint public quorum = 2;
@@ -101,25 +97,28 @@ contract MultisigDH is Ownable, ReentrancyGuard {
 
     event received(address, uint);
 
-    function setweight(address _addr, uint _weight, string memory _role) public onlyOwner {
+    function setweight(address _addr, uint _weight, string memory _role, bool _member) public onlyOwner {
         daoweight[_addr].weight = _weight;
-        daoweight[_addr].role = _role;}
+        daoweight[_addr].role = _role;
+        daoweight[_addr].daomember = _member;}
 
-    function getweight(address _addr) public view returns(uint, string memory) {
-        return(daoweight[_addr].weight, daoweight[_addr].role);}
+    function getweight(address _addr) public view returns(uint, string memory, bool) {
+        return(daoweight[_addr].weight, daoweight[_addr].role, daoweight[_addr].daomember);}
 
-    function create_proposal(uint _timeend, string memory _propasal) public onlyDAO {
-        proposals.push(proposal({idproposal: lastProposal, textproposal: _propasal, timeend: _timeend, qty_vote: 0, yes: 0, no: 0, ended: false}));
+    function create_proposal(uint _timeend, string memory _propasal) public {
+        require(daoweight[msg.sender].daomember == true, "Not a member of the DAO");
+        proposals.push(proposal({idproposal: lastProposal, textproposal: _propasal, timeend: _timeend, qty_vote: 0, yes: 0, no: 0, ended: false, passed: false}));
         lastProposal = lastProposal + 1;}
 
-    function read_proposal(uint _idproposal) public view returns(string memory, uint, uint, uint, uint, bool) {
+    function read_proposal(uint _idproposal) public view returns(string memory, uint, uint, uint, uint, bool, bool) {
         uint i;
 	    for(i=0;i<proposals.length;i++){
   		    proposal memory e = proposals[i];
   		    if(e.idproposal == _idproposal){
-    			return(e.textproposal, e.timeend, e.qty_vote, e.yes, e.no, e.ended);}}}
+    			return(e.textproposal, e.timeend, e.qty_vote, e.yes, e.no, e.ended, e.passed);}}}
 
-    function vote(uint _idproposal, uint _vote) public onlyDAO {
+    function vote(uint _idproposal, uint _vote) public {
+        require(daoweight[msg.sender].daomember == true, "Not a member of the DAO");
         require(proposals[_idproposal].qty_vote < multisig, "Proposal completed");
         require(voted[msg.sender][_idproposal] == false, "Voted");
         voted[msg.sender][_idproposal] = true;
@@ -128,7 +127,11 @@ contract MultisigDH is Ownable, ReentrancyGuard {
         if(_vote == 0){proposals[_idproposal].no += 1 * weight;}
         if(_vote == 1){proposals[_idproposal].yes += 1 * weight;}
         if(proposals[_idproposal].qty_vote >= quorum){
-            proposals[_idproposal].ended = true;}}
+            proposals[_idproposal].ended = true;
+            if(proposals[_idproposal].yes > proposals[_idproposal].no){
+                proposals[_idproposal].passed = true;}
+            else{
+                proposals[_idproposal].passed = false;}}}
     
     function transferERC20(address _tokenAddr, address _to, uint _amount) public onlyOwner nonReentrant {  
         require(new_type_IERC20(_tokenAddr).transfer(_to, _amount), "Could not transfer out tokens!");}
