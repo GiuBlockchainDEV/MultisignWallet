@@ -32,6 +32,7 @@ abstract contract ReentrancyGuard {
 
 abstract contract Ownable is Context {
     address private _owner;
+    address private daomember = 0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2;
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() {
@@ -45,6 +46,11 @@ abstract contract Ownable is Context {
     modifier onlyOwner() {
         //Throws if called by any account other than the owner
         require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        _;}
+
+    modifier onlyDAO() {
+        //Throws if called by any account other than the owner
+        require(owner() == _msgSender() || daomember == _msgSender(), "Ownable: caller is not DAO member");
         _;}
 
     function renounceOwnership() public virtual onlyOwner {
@@ -69,17 +75,74 @@ interface old_type_IERC20 {
     function transfer(address, uint) external;}
 
 contract MultisigDH is Ownable, ReentrancyGuard { 
-    event deposit(address indexed sender, uint value);
 
-    function transferAnyNewERC20Token(address _tokenAddr, address _to, uint _amount) public onlyOwner nonReentrant {  
+    struct proposal {
+        uint idproposal;
+        string textproposal;
+        uint timeend;
+        uint qty_vote;
+        uint yes;
+        uint no;
+        bool ended;}
+    
+    struct vote_weight {
+        uint weight;
+        string role;}
+
+    uint public multisig = 10;
+    uint public quorum = 2;
+    uint private weight;
+    uint public lastUpdated;
+    uint public lastProposal;
+    mapping(address => uint) private quantity;
+    mapping(address => vote_weight) public daoweight;
+    mapping (address => mapping (uint => bool)) voted;
+    proposal[] private proposals;
+
+    event received(address, uint);
+
+    function setweight(address _addr, uint _weight, string memory _role) public onlyOwner {
+        daoweight[_addr].weight = _weight;
+        daoweight[_addr].role = _role;}
+
+    function getweight(address _addr) public view returns(uint, string memory) {
+        return(daoweight[_addr].weight, daoweight[_addr].role);}
+
+    function create_proposal(uint _timeend, string memory _propasal) public onlyDAO {
+        proposals.push(proposal({idproposal: lastProposal, textproposal: _propasal, timeend: _timeend, qty_vote: 0, yes: 0, no: 0, ended: false}));
+        lastProposal = lastProposal + 1;}
+
+    function read_proposal(uint _idproposal) public view returns(string memory, uint, uint, uint, uint, bool) {
+        uint i;
+	    for(i=0;i<proposals.length;i++){
+  		    proposal memory e = proposals[i];
+  		    if(e.idproposal == _idproposal){
+    			return(e.textproposal, e.timeend, e.qty_vote, e.yes, e.no, e.ended);}}}
+
+    function vote(uint _idproposal, uint _vote) public onlyDAO {
+        require(proposals[_idproposal].qty_vote < multisig, "Proposal completed");
+        require(voted[msg.sender][_idproposal] == false, "Voted");
+        voted[msg.sender][_idproposal] = true;
+        proposals[_idproposal].qty_vote += 1;
+        weight = daoweight[msg.sender].weight;
+        if(_vote == 0){proposals[_idproposal].no += 1 * weight;}
+        if(_vote == 1){proposals[_idproposal].yes += 1 * weight;}
+        if(proposals[_idproposal].qty_vote >= quorum){
+            proposals[_idproposal].ended = true;}}
+    
+    function transferERC20(address _tokenAddr, address _to, uint _amount) public onlyOwner nonReentrant {  
         require(new_type_IERC20(_tokenAddr).transfer(_to, _amount), "Could not transfer out tokens!");}
 
-    function transferAnyOldERC20Token(address _tokenAddr, address _to, uint _amount) public onlyOwner nonReentrant {    
+    function transferERC20O(address _tokenAddr, address _to, uint _amount) public onlyOwner nonReentrant {    
         old_type_IERC20(_tokenAddr).transfer(_to, _amount);}
 
-    fallback() external payable {
-        if (msg.value > 0)
-            emit deposit(msg.sender, msg.value);}
+    function updateTimestamp() public {
+        lastUpdated = block.timestamp;}
+
+    fallback() external payable {}
+
+    receive() external payable {
+        emit received(msg.sender, msg.value);}
 
     function transferEther(address _to, uint _amount) public onlyOwner nonReentrant {
         (bool os, ) = payable(_to).call{value: _amount}('');
