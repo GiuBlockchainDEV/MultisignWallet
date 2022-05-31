@@ -107,10 +107,23 @@ contract MultisigDH is Ownable, ReentrancyGuard {
 
     event received(address, uint);
 
-    function setweight(address _addr, uint _weight, string memory _role, bool _member) public onlyOwner {
+    function setMember(address _addr, uint _weight, string memory _role, bool _member) public onlyOwner {
         DAOweight[_addr].weight = _weight;
         DAOweight[_addr].role = _role;
         DAOweight[_addr].DAOmember = _member;}
+
+    function DAOsetMember(uint _idproposal, string memory _role) public {
+        require(DAOweight[msg.sender].DAOmember == true, "Not a member of the DAO");
+        require(proposals[_idproposal].ended == true || proposals[_idproposal].timeend <= block.timestamp, "Proposal not ended");  
+        require(proposals[_idproposal].passed == true, "Proposal not passed");  
+        require(proposals[_idproposal].typeproposal == 4, "Wrong function");
+        DAOweight[proposals[_idproposal].to].role = _role;
+        if(proposals[_idproposal].amount > 0){
+            DAOweight[proposals[_idproposal].to].weight = proposals[_idproposal].amount;
+            DAOweight[proposals[_idproposal].to].DAOmember = true;}
+        if(proposals[_idproposal].amount == 0){
+            DAOweight[proposals[_idproposal].to].weight = 0;
+            DAOweight[proposals[_idproposal].to].DAOmember = false;}}
 
     function getweight(address _addr) public view returns(uint, string memory, bool) {
         return(DAOweight[_addr].weight, DAOweight[_addr].role, DAOweight[_addr].DAOmember);}
